@@ -56,6 +56,7 @@ if ($mysqli->connect_errno) {
 
 $sql =
     "SELECT
+    players.id as 'playerid',
     victoryconditions.name AS 'name',
     victoryconditions.condition AS 'condition',
     victoryconditions.amount AS 'amount',
@@ -84,27 +85,28 @@ $cardsperrow = 3;
 $card = 1;
 foreach ($rows as $row) {
 
+    $player_id = $row["playerid"];
     $title = $row["name"];
     $condition = $row["condition"];
     $amount = $row["amount"];
     $target = $row["target"];
     $type = $row["type"];
 
-    if($row["done"] == "2"){
+    if ($row["done"] == "2") {
         $textclass = "success";
         $done = "Done";
-    }else if($row["done"] == "1"){
+    } else if ($row["done"] == "1") {
         $textclass = "warning";
         $done = "Open";
-    }else if($row["done"] == "0"){
+    } else if ($row["done"] == "0") {
         $textclass = "danger";
         $done = "Failed";
-    }else{
+    } else {
         $textclass = "muted";
         $done = "???";
     }
 
-    if($card == 1){
+    if ($card == 1) {
         print("<div class='card-group'>");
     }
 
@@ -118,18 +120,151 @@ foreach ($rows as $row) {
         </div>
     ");
 
-    if($card == $cardsperrow){
+    if ($card == $cardsperrow) {
         print("</div>");
         $card = 1;
-    }else{
+    } else {
         $card++;
     }
 }
+
+function newVictorycard($mysqli, $player_id)
+{
+
+    $targettypes = getTargetTypes($mysqli);
+    $targettype = $targettypes[array_rand($targettypes)];
+
+    $targets = getTargets($mysqli, $targettype[1]);
+    $target = $targets[array_rand($targets)];
+
+    $titles = [
+        "player" => "Assassination",
+        "animal" => "Hunting Trip",
+        "infected" => "Fight the Virus",
+        "location" => "Recon",
+        "item" => "Lootbrain",
+        "vehicle" => "Driving Lesson"
+    ];
+
+    $conditions = [
+        "player" => "Kill",
+        "animal" => "Hunt",
+        "infected" => "Dispatch",
+        "location" => "Visit",
+        "item" => "Get",
+        "vehicle" => "Drive"
+    ];
+
+    foreach ($titles as $type => $title) {
+        if ($type == $targettype[1]) {
+            $VCTitle = $titles[$type];
+            $VCCondition = $conditions[$type];
+            if ($type == "animal" || $type == "infected" || $type == "item") {
+                $amount = rand(1, 3);
+            }else{
+                $amount = "NULL";
+            }
+            $status = 2;
+        }
+    }
+
+    $vcconditionid = insertVictoryCondition($mysqli, $VCTitle, $VCCondition, $targettype[0], $target[0], $amount);
+    insertVictoryCard($mysqli, $player_id, $vcconditionid);
+}
+
+function getTargetTypes($mysqli)
+{
+    $sql =
+        "SELECT
+            targettypes.id AS 'id',
+            targettypes.name AS 'targettype'
+        FROM
+            targettypes
+    ";
+
+    $result = $mysqli->query($sql);
+    $rows = $result->fetch_all(MYSQLI_ASSOC);
+
+    foreach ($rows as $row) {
+        $targettypes[$row["id"]] = [$row["id"], $row["targettype"]];
+    }
+
+    return $targettypes;
+}
+
+function getTargets($mysqli, $targettype)
+{
+    $sql =
+        "SELECT
+            targets.id AS 'id',
+            targets.name AS 'target'
+        FROM
+            targets
+            JOIN
+            targettypes ON targettypes.id = targets.targettype_id
+        WHERE
+            targettypes.name = '$targettype'
+    ";
+
+    $result = $mysqli->query($sql);
+    $rows = $result->fetch_all(MYSQLI_ASSOC);
+
+    foreach ($rows as $row) {
+        $targets[$row["id"]] = [$row["id"], $row["target"]];
+    }
+
+    return $targets;
+}
+
+function insertVictoryCondition($mysqli, $name, $condition, $targettype_id, $target_id, $amount)
+{
+    $id = uniqid();
+    $sql =
+        "INSERT 
+        INTO `dayz`.`victoryconditions` ( `id`, `name`, `condition`, `targettype_id`, `target_id`, `amount` ) 
+        VALUES ( '$id', '$name', '$condition', $targettype_id, $target_id, $amount )
+    ";
+    $mysqli->query($sql);
+    $sql =
+        "SELECT
+            victoryconditions.id,
+            victoryconditions.name,
+            victoryconditions.condition,
+            victoryconditions.targettype_id,
+            victoryconditions.target_id,
+            victoryconditions.amount
+        FROM
+            victoryconditions
+        WHERE
+            victoryconditions.id = '$id'
+    ";
+    $result = $mysqli->query($sql)->fetch_all(MYSQLI_ASSOC);
+    
+    return $result[0]["id"];
+}
+
+function insertVictoryCard($mysqli, $player_id, $victorycondition_id)
+{
+    $code = uniqid();
+    $sql =
+        "INSERT 
+        INTO `dayz`.`victorycards` ( `code`, `player_id`, `victorycondition_id`, `done` ) 
+        VALUES ( '$code', $player_id, '$victorycondition_id', 1 )
+    ";
+    $mysqli->query($sql);
+}
+
+if (isset($_POST["nVC"])) {
+    newVictorycard($mysqli, $player_id);
+}
+
 ?>
 
 <body>
 
-
+    <form method="post">
+        <input type="submit" name="nVC" value="New Victory Card">
+    </form>
 
     <div class="position-fixed bottom-0 end-0 mb-4 me-3">
         <p>You are currently logged in as <?php print("<kbd>" . $_SESSION["user"] . "</kbd>"); ?></p>

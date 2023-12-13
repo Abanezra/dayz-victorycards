@@ -144,9 +144,15 @@ if (isset($_POST["sup"])) {
             VALUES ('$user', '$pass');
             ";
 
-        console_log($sql);
+        $mysqli->query($sql);
 
-        $mysqli->query($sql);     # get query result
+        $sql =
+        "INSERT 
+        INTO `dayz`.`targets` (`name`, `targettype_id`) 
+        VALUES ('$user', 1);
+        ";
+
+    $mysqli->query($sql);
 
         $alarmmessage = "Success";
     }
