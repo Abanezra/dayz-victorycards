@@ -56,7 +56,7 @@ if ($mysqli->connect_errno) {
 
 $sql =
     "SELECT
-    players.id as 'playerid',
+    players.id as 'player_id',
     victoryconditions.name AS 'name',
     victoryconditions.condition AS 'condition',
     victoryconditions.amount AS 'amount',
@@ -85,7 +85,7 @@ $cardsperrow = 3;
 $card = 1;
 foreach ($rows as $row) {
 
-    $player_id = $row["playerid"];
+    $player_id = $row["player_id"];
     $title = $row["name"];
     $condition = $row["condition"];
     $amount = $row["amount"];
@@ -161,7 +161,7 @@ function newVictorycard($mysqli, $player_id)
             $VCCondition = $conditions[$type];
             if ($type == "animal" || $type == "infected" || $type == "item") {
                 $amount = rand(1, 3);
-            }else{
+            } else {
                 $amount = "NULL";
             }
             $status = 2;
@@ -170,6 +170,8 @@ function newVictorycard($mysqli, $player_id)
 
     $vcconditionid = insertVictoryCondition($mysqli, $VCTitle, $VCCondition, $targettype[0], $target[0], $amount);
     insertVictoryCard($mysqli, $player_id, $vcconditionid);
+
+    header('Location: http://127.0.0.1/dayz/victorycards.php');
 }
 
 function getTargetTypes($mysqli)
@@ -239,7 +241,7 @@ function insertVictoryCondition($mysqli, $name, $condition, $targettype_id, $tar
             victoryconditions.id = '$id'
     ";
     $result = $mysqli->query($sql)->fetch_all(MYSQLI_ASSOC);
-    
+
     return $result[0]["id"];
 }
 
@@ -255,7 +257,19 @@ function insertVictoryCard($mysqli, $player_id, $victorycondition_id)
 }
 
 if (isset($_POST["nVC"])) {
-    newVictorycard($mysqli, $player_id);
+
+    $sql =
+        "SELECT
+            players.id
+        FROM
+            players
+        WHERE players.name = IF($adminaccess = 1, players.name, '$user')
+    ";
+
+    $result = $mysqli->query($sql)->fetch_all(MYSQLI_ASSOC);
+
+
+    newVictorycard($mysqli, $result[0]["id"]);
 }
 
 ?>
