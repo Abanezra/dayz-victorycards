@@ -19,9 +19,8 @@
 
     <style>
         body {
-            background-image: url('./assets/backdrop.png');
-            background-repeat: no-repeat;
-            background-size: 100%;
+            background-color: #3e3546;
+            color: #ffdb00;
         }
     </style>
 
@@ -36,7 +35,19 @@ if ($_SESSION["user"] == "admin") {
 } else {
     $adminaccess = 0;
 }
+
 $user = $_SESSION["user"];
+$status = @getstate();
+function getstate()
+{
+    if ($_GET["state"] == "" or !isset($_GET["state"])) {
+        $status = "-";
+    } else {
+        $status = $_GET["state"];
+    }
+    return $status;
+}
+
 
 console_log("console active");
 function console_log($output, $with_script_tags = true)         #a function that can log things to the console
@@ -62,7 +73,7 @@ $sql =
     victoryconditions.amount AS 'amount',
     targets.name AS 'target',
     targettypes.name AS 'type',
-    victorycards.done AS 'done'
+    victorycards.state_id AS 'status'
 FROM
     players 
     JOIN 
@@ -73,60 +84,15 @@ FROM
     targets ON targets.id = victoryconditions.target_id
     JOIN
     targettypes ON targettypes.id = victoryconditions.targettype_id
+    JOIN
+    states ON states.id = victorycards.state_id
 WHERE
+    states.name = IF('$status' = '-', states.name, '$status')
+    AND
     players.name = IF($adminaccess = 1, players.name, '$user')
 ";
 
-$result = $mysqli->query($sql);     # get query result
-$rows = $result->fetch_all(MYSQLI_ASSOC);       # fetches all rows of the query result table as an array
 
-
-$cardsperrow = 3;
-$card = 1;
-foreach ($rows as $row) {
-
-    $player_id = $row["player_id"];
-    $title = $row["name"];
-    $condition = $row["condition"];
-    $amount = $row["amount"];
-    $target = $row["target"];
-    $type = $row["type"];
-
-    if ($row["done"] == "2") {
-        $textclass = "success";
-        $done = "Done";
-    } else if ($row["done"] == "1") {
-        $textclass = "warning";
-        $done = "Open";
-    } else if ($row["done"] == "0") {
-        $textclass = "danger";
-        $done = "Failed";
-    } else {
-        $textclass = "muted";
-        $done = "???";
-    }
-
-    if ($card == 1) {
-        print("<div class='card-group'>");
-    }
-
-    print("
-        <div class='card m-3'>
-            <div class='card-body'>
-                <h5 class='card-title'>$title</h5>
-                <p class='card-text'>$condition $amount $target</p>
-                <p class='card-text'><small class='text-$textclass'>Status: $done</small></p>
-            </div>
-        </div>
-    ");
-
-    if ($card == $cardsperrow) {
-        print("</div>");
-        $card = 1;
-    } else {
-        $card++;
-    }
-}
 
 function newVictorycard($mysqli, $player_id)
 {
@@ -171,7 +137,7 @@ function newVictorycard($mysqli, $player_id)
     $vcconditionid = insertVictoryCondition($mysqli, $VCTitle, $VCCondition, $targettype[0], $target[0], $amount);
     insertVictoryCard($mysqli, $player_id, $vcconditionid);
 
-    header('Location: http://127.0.0.1/dayz/victorycards.php');
+    @header('Location: victorycards.php');
 }
 
 function getTargetTypes($mysqli)
@@ -250,11 +216,42 @@ function insertVictoryCard($mysqli, $player_id, $victorycondition_id)
     $code = uniqid();
     $sql =
         "INSERT 
-        INTO `dayz`.`victorycards` ( `code`, `player_id`, `victorycondition_id`, `done` ) 
+        INTO `dayz`.`victorycards` ( `code`, `player_id`, `victorycondition_id`, `state_id` ) 
         VALUES ( '$code', $player_id, '$victorycondition_id', 1 )
     ";
     $mysqli->query($sql);
 }
+
+function write_dropdown($mysqli, $table, $item)      # function to write a dropdown using a database table and item as input
+{
+    $sql = # get ids
+        "SELECT
+                $table.id 
+            FROM
+                $table
+            WHERE
+                1
+            ";
+
+    $result = $mysqli->query($sql);     # get query results
+    $ids = $result->fetch_all(MYSQLI_ASSOC);        # fetches all rows of the query result table as an array
+
+    foreach ($ids as $id) {         # for each id, the corresponding is printed into the dropdown
+        $id = $id["id"];        # read the id
+        $sql =      # select the item with $id as id
+            "SELECT
+                    $table.$item 
+                FROM
+                    $table
+                WHERE
+                    $table.id = $id
+                ";
+        $result = $mysqli->query($sql);     # get query results
+        $name = $result->fetch_all(MYSQLI_ASSOC);       # fetches all rows of the query result table as an array
+        $name = $name[0]["$item"];      # get the item and save it into $name
+        print("<option name=$name class='bg-warning dropdown-item'>" . strtoupper($name) . "</option>");     # print the $name as an option in the dropdown
+    }
+};
 
 if (isset($_POST["nVC"])) {
 
@@ -276,9 +273,94 @@ if (isset($_POST["nVC"])) {
 
 <body>
 
-    <form method="post">
-        <input type="submit" name="nVC" value="New Victory Card">
-    </form>
+    <div class="d-flex">
+
+
+        <div class="flex-fill border-end border-3 border-warning">
+            <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-uppercase m-3 text-warning">
+                <span>Filter Settings</span>
+            </h6>
+            <ul class="nav flex-column m-3">
+                <li class="nav-item m-1">
+                    <form method="post">
+                        <input type="submit" name="nVC" value="New Victory Card" class="btn btn-warning w-25">
+                    </form>
+                </li>
+                <li class="nav-item m-1">
+                    <form method="get">
+                        <input type="submit" name="fVC" value="Filter Victory Cards" class="btn btn-warning w-25 border-0 border-warning">
+                        <select name='state' class="dropdown-toggle w-25 bg-warning">
+                            <option value=''>-</option>
+                            <?php write_dropdown($mysqli, "states", "name"); ?>
+                        </select>
+
+                    </form>
+                </li>
+            </ul>
+        </div>
+
+        <div class="flex-fill">
+            <?php
+            $result = $mysqli->query($sql);     # get query result
+            $rows = $result->fetch_all(MYSQLI_ASSOC);       # fetches all rows of the query result table as an array
+
+            print("<div class='container' style='overflow-y:scroll; height:1000px'>");
+
+            $cardsperrow = 3;
+            $card = 1;
+
+
+            foreach ($rows as $row) {
+
+                $player_id = $row["player_id"];
+                $title = $row["name"];
+                $condition = $row["condition"];
+                $amount = $row["amount"];
+                $target = $row["target"];
+                $type = $row["type"];
+
+                if ($row["status"] == "2") {
+                    $textclass = "success";
+                    $status = "Done";
+                } else if ($row["status"] == "1") {
+                    $textclass = "warning";
+                    $status = "Open";
+                } else if ($row["status"] == "0") {
+                    $textclass = "danger";
+                    $status = "Failed";
+                } else {
+                    $textclass = "secondary";
+                    $status = "???";
+                }
+
+                if ($card == 1) {
+                    print("<div class='card-group'>");
+                }
+
+                print("
+                <div class='card m-3 bg-dark text-white'>
+                    <div class='card-body'>
+                        <h5 class='card-title'>$title</h5>
+                        <p class='card-text'>$condition $amount $target</p>
+                        <p class='card-text'><small class='text-$textclass'>Status: $status</small></p>
+                    </div>
+                </div>
+            ");
+
+                if ($card == $cardsperrow) {
+                    print("</div>");
+                    $card = 1;
+                } else {
+                    $card++;
+                }
+            }
+
+            print("</div>");
+            print("</div>");
+            ?>
+        </div>
+    </div>
+
 
     <div class="position-fixed bottom-0 end-0 mb-4 me-3">
         <p>You are currently logged in as <?php print("<kbd>" . $_SESSION["user"] . "</kbd>"); ?></p>
