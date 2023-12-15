@@ -65,35 +65,6 @@ if ($mysqli->connect_errno) {
     die("Verbindung fehlgeschlagen" . $mysqli->connect_error);
 }
 
-$sql =
-    "SELECT
-    players.id as 'player_id',
-    victoryconditions.name AS 'name',
-    victoryconditions.condition AS 'condition',
-    victoryconditions.amount AS 'amount',
-    targets.name AS 'target',
-    targettypes.name AS 'type',
-    victorycards.state_id AS 'status'
-FROM
-    players 
-    JOIN 
-    victorycards ON players.id = victorycards.player_id
-    JOIN
-    victoryconditions ON victoryconditions.id = victorycards.victorycondition_id
-    JOIN
-    targets ON targets.id = victoryconditions.target_id
-    JOIN
-    targettypes ON targettypes.id = victoryconditions.targettype_id
-    JOIN
-    states ON states.id = victorycards.state_id
-WHERE
-    states.name = IF('$status' = '-', states.name, '$status')
-    AND
-    players.name = IF($adminaccess = 1, players.name, '$user')
-";
-
-
-
 function newVictorycard($mysqli, $player_id)
 {
 
@@ -251,22 +222,56 @@ function write_dropdown($mysqli, $table, $item)      # function to write a dropd
         $name = $name[0]["$item"];      # get the item and save it into $name
         print("<option name=$name class='bg-warning dropdown-item'>" . strtoupper($name) . "</option>");     # print the $name as an option in the dropdown
     }
-};
+}
+
+
 
 if (isset($_POST["nVC"])) {
 
     $sql =
         "SELECT
-            players.id
+            players.id AS player_id
         FROM
             players
         WHERE players.name = IF($adminaccess = 1, players.name, '$user')
     ";
 
-    $result = $mysqli->query($sql)->fetch_all(MYSQLI_ASSOC);
+    $result = $mysqli->query($sql)->fetch_all(MYSQLI_ASSOC);     # get query result
 
+    $player_id = $result[0]["player_id"];
+    newVictorycard($mysqli, $player_id);
+}
 
-    newVictorycard($mysqli, $result[0]["id"]);
+if (isset($_POST["done"])) {
+
+    $victorycondition_id = $_POST["victorycondition_id"];
+
+    $sql =
+        "UPDATE 
+            dayz.victorycards 
+        SET state_id=2 
+        WHERE  victorycondition_id = '$victorycondition_id';
+    ";
+
+    $mysqli->query($sql);
+
+    @header('Location: victorycards.php');
+}
+
+if (isset($_POST["fail"])) {
+
+    $victorycondition_id = $_POST["victorycondition_id"];
+
+    $sql =
+        "UPDATE 
+            dayz.victorycards 
+        SET state_id=0 
+        WHERE  victorycondition_id = '$victorycondition_id';
+    ";
+
+    $mysqli->query($sql);
+
+    @header('Location: victorycards.php');
 }
 
 ?>
@@ -274,8 +279,6 @@ if (isset($_POST["nVC"])) {
 <body>
 
     <div class="d-flex">
-
-
         <div class="flex-fill border-end border-3 border-warning">
             <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-uppercase m-3 text-warning">
                 <span>Filter Settings</span>
@@ -296,11 +299,49 @@ if (isset($_POST["nVC"])) {
 
                     </form>
                 </li>
+                <li class="nav-item m-1">
+                    <form method="get">
+                        <input type="submit" name="sVC" value="Sort Victory Cards" class="btn btn-warning w-25 border-0 border-warning">
+                        <select name='sort' class="dropdown-toggle w-25 bg-warning">
+                            <option value=''>-</option>
+
+                        </select>
+                    </form>
+                </li>
             </ul>
         </div>
-
         <div class="flex-fill">
             <?php
+
+            $sql =
+                "SELECT
+    players.id as 'player_id',
+    victoryconditions.id AS 'victorycondition_id',
+    victoryconditions.name AS 'name',
+    victoryconditions.condition AS 'condition',
+    victoryconditions.amount AS 'amount',
+    targets.name AS 'target',
+    targettypes.name AS 'type',
+    victorycards.state_id AS 'status'
+FROM
+    players 
+    JOIN 
+    victorycards ON players.id = victorycards.player_id
+    JOIN
+    victoryconditions ON victoryconditions.id = victorycards.victorycondition_id
+    JOIN
+    targets ON targets.id = victoryconditions.target_id
+    JOIN
+    targettypes ON targettypes.id = victoryconditions.targettype_id
+    JOIN
+    states ON states.id = victorycards.state_id
+WHERE
+        states.name = IF('$status' = '-', states.name, '$status')
+        AND
+        players.name = IF($adminaccess = 1, players.name, '$user')
+    ";
+
+
             $result = $mysqli->query($sql);     # get query result
             $rows = $result->fetch_all(MYSQLI_ASSOC);       # fetches all rows of the query result table as an array
 
@@ -318,6 +359,7 @@ if (isset($_POST["nVC"])) {
                 $amount = $row["amount"];
                 $target = $row["target"];
                 $type = $row["type"];
+                $victorycondition_id = $row["victorycondition_id"];
 
                 if ($row["status"] == "2") {
                     $textclass = "success";
@@ -338,11 +380,18 @@ if (isset($_POST["nVC"])) {
                 }
 
                 print("
-                <div class='card m-3 bg-dark text-white'>
-                    <div class='card-body'>
-                        <h5 class='card-title'>$title</h5>
-                        <p class='card-text'>$condition $amount $target</p>
-                        <p class='card-text'><small class='text-$textclass'>Status: $status</small></p>
+                <div class='card m-3 bg-dark text-white border border-2 border-$textclass rounded-4'>
+                    <div class='d-flex justify-content-between'>
+                        <div class='card-body flex-grow-1'>
+                            <h5 class='card-title'>$title</h5>
+                            <p class='card-text'>$condition $amount $target</p>
+                            <p class='card-text'><small class='text-$textclass'>Status: $status</small></p>
+                        </div>
+                        <form method='post'class='mt-3 flex-shrink-1 me-3'>
+                            <input type='hidden' name='victorycondition_id' value='$victorycondition_id'>
+                            <div><input type='submit' name='done' class='btn btn-success m-1' value='✓'></div>
+                            <div><input type='submit' name='fail' class='btn btn-danger m-1' value='✗'></div>
+                        </form>
                     </div>
                 </div>
             ");
